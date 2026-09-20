@@ -1,6 +1,30 @@
+import { useMemo, useState } from 'react'
 import FileCard from './FileCard.jsx'
+import { useArchivedFilenames } from '../utils/archive.js'
+import { buildCsv, buildJson, downloadText } from '../utils/exportHistory.js'
 
 export default function Dashboard({ files, isLoading, error, onNewUpload, onUploadNewVersion }) {
+  const [query, setQuery] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const { archived, toggleArchive } = useArchivedFilenames()
+
+  const archivedCount = files.filter((f) => archived.has(f.filename)).length
+
+  const visibleFiles = useMemo(() => {
+    return files.filter((f) => {
+      if (!showArchived && archived.has(f.filename)) return false
+      if (query && !f.filename.toLowerCase().includes(query.trim().toLowerCase())) return false
+      return true
+    })
+  }, [files, archived, showArchived, query])
+
+  const handleExport = (format) => {
+    const rows = files.flatMap((f) => f.versions.map((v) => ({ filename: f.filename, ...v })))
+    if (rows.length === 0) return
+    if (format === 'csv') downloadText(buildCsv(rows), 'helix-history.csv', 'text/csv')
+    else downloadText(buildJson(rows), 'helix-history.json', 'application/json')
+  }
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -10,12 +34,49 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
             Every file is content-addressed on IPFS and versioned on-chain.
           </p>
         </div>
-        <button
-          onClick={onNewUpload}
-          className="rounded-lg bg-helix px-4 py-2 text-sm font-semibold text-white hover:bg-helix-light"
-        >
-          + Upload file
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => handleExport('json')}
+            disabled={files.length === 0}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light disabled:opacity-40"
+          >
+            Export JSON
+          </button>
+          <button
+            onClick={() => handleExport('csv')}
+            disabled={files.length === 0}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light disabled:opacity-40"
+          >
+            Export CSV
+          </button>
+          <button
+            onClick={onNewUpload}
+            className="rounded-lg bg-helix px-4 py-2 text-sm font-semibold text-white hover:bg-helix-light"
+          >
+            + Upload file
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search files by name…"
+          className="w-full max-w-xs rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-helix-light focus:outline-none"
+        />
+        {archivedCount > 0 && (
+          <label className="flex items-center gap-2 text-sm text-slate-400">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="rounded border-slate-700 bg-slate-800"
+            />
+            Show archived ({archivedCount})
+          </label>
+        )}
       </div>
 
       {error && (
@@ -39,9 +100,21 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
         </div>
       )}
 
+      {!isLoading && files.length > 0 && visibleFiles.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-800 px-4 py-12 text-center">
+          <p className="text-slate-400">No files match your filters.</p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {files.map((file) => (
-          <FileCard key={file.filename} file={file} onUploadNewVersion={onUploadNewVersion} />
+        {visibleFiles.map((file) => (
+          <FileCard
+            key={file.filename}
+            file={file}
+            onUploadNewVersion={onUploadNewVersion}
+            isArchived={archived.has(file.filename)}
+            onToggleArchive={toggleArchive}
+          />
         ))}
       </div>
     </section>

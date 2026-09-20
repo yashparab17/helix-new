@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { uploadToPinata } from '../utils/pinata.js'
+import { shortCid } from '../utils/format.js'
 
 const STAGES = {
   IDLE: 'idle',
   PINNING: 'pinning',
-  CONFIRMING: 'confirming',
+  SIGNING: 'signing',
+  MINING: 'mining',
   DONE: 'done',
   ERROR: 'error',
 }
@@ -15,6 +17,7 @@ export default function UploadModal({ open, onClose, onUpload, existingFilenames
   const [progress, setProgress] = useState(0)
   const [stage, setStage] = useState(STAGES.IDLE)
   const [errorMsg, setErrorMsg] = useState('')
+  const [txHash, setTxHash] = useState('')
 
   if (!open) return null
 
@@ -27,10 +30,11 @@ export default function UploadModal({ open, onClose, onUpload, existingFilenames
     setProgress(0)
     setStage(STAGES.IDLE)
     setErrorMsg('')
+    setTxHash('')
   }
 
   const handleClose = () => {
-    if (stage === STAGES.PINNING || stage === STAGES.CONFIRMING) return
+    if (stage === STAGES.PINNING || stage === STAGES.SIGNING || stage === STAGES.MINING) return
     reset()
     onClose()
   }
@@ -44,8 +48,11 @@ export default function UploadModal({ open, onClose, onUpload, existingFilenames
       setErrorMsg('')
       const cid = await uploadToPinata(file, setProgress)
 
-      setStage(STAGES.CONFIRMING)
-      await onUpload(effectiveName, cid)
+      setStage(STAGES.SIGNING)
+      await onUpload(effectiveName, cid, (hash) => {
+        setTxHash(hash)
+        setStage(STAGES.MINING)
+      })
 
       setStage(STAGES.DONE)
       setTimeout(() => {
@@ -59,7 +66,7 @@ export default function UploadModal({ open, onClose, onUpload, existingFilenames
     }
   }
 
-  const busy = stage === STAGES.PINNING || stage === STAGES.CONFIRMING
+  const busy = stage === STAGES.PINNING || stage === STAGES.SIGNING || stage === STAGES.MINING
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 p-4">
@@ -124,9 +131,16 @@ export default function UploadModal({ open, onClose, onUpload, existingFilenames
             </div>
           )}
 
-          {stage === STAGES.CONFIRMING && (
+          {stage === STAGES.SIGNING && (
             <p className="text-sm text-amber-400">
               Confirm the transaction in MetaMask to record this version on-chain…
+            </p>
+          )}
+
+          {stage === STAGES.MINING && (
+            <p className="text-sm text-amber-400">
+              Transaction <span className="font-mono">{shortCid(txHash)}</span> submitted —
+              waiting for it to be mined…
             </p>
           )}
 
@@ -145,7 +159,9 @@ export default function UploadModal({ open, onClose, onUpload, existingFilenames
           >
             {stage === STAGES.PINNING
               ? 'Uploading to IPFS…'
-              : stage === STAGES.CONFIRMING
+              : stage === STAGES.SIGNING
+              ? 'Waiting for wallet signature…'
+              : stage === STAGES.MINING
               ? 'Waiting for confirmation…'
               : 'Upload & record on-chain'}
           </button>

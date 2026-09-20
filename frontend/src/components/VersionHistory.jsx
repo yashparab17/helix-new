@@ -1,21 +1,18 @@
 import { useState } from 'react'
 import { downloadFromIpfs, cidToGatewayUrl } from '../utils/pinata.js'
+import { formatTimestamp, formatDuration, shortCid } from '../utils/format.js'
 
-function formatTimestamp(unixSeconds) {
-  return new Date(unixSeconds * 1000).toLocaleString()
-}
-
-function shortCid(cid) {
-  if (!cid || cid.length <= 14) return cid
-  return `${cid.slice(0, 8)}…${cid.slice(-6)}`
-}
+const IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|svg|bmp)$/i
 
 export default function VersionHistory({ filename, versions }) {
   const [downloadingVersion, setDownloadingVersion] = useState(null)
+  const [copiedVersion, setCopiedVersion] = useState(null)
+  const [previewVersion, setPreviewVersion] = useState(null)
 
   // Show newest first for readability, but the underlying chain data (and
   // version numbers) are strictly linear / append-only oldest-to-newest.
   const ordered = [...versions].sort((a, b) => b.version - a.version)
+  const isPreviewable = IMAGE_EXTENSION.test(filename)
 
   const handleDownload = async (version) => {
     try {
@@ -29,10 +26,22 @@ export default function VersionHistory({ filename, versions }) {
     }
   }
 
+  const handleCopy = async (version) => {
+    try {
+      await navigator.clipboard.writeText(version.cid)
+      setCopiedVersion(version.version)
+      setTimeout(() => setCopiedVersion(null), 1500)
+    } catch {
+      window.alert(`Could not copy automatically — CID: ${version.cid}`)
+    }
+  }
+
   return (
     <ol className="relative ml-2 border-l border-slate-800 pl-4">
       {ordered.map((v, idx) => {
         const isLatest = idx === 0
+        const prev = ordered[idx + 1]
+        const secondsSincePrev = prev ? v.timestamp - prev.timestamp : null
         return (
           <li key={v.version} className="mb-4 last:mb-0">
             <span
@@ -59,10 +68,29 @@ export default function VersionHistory({ filename, versions }) {
                 <p className="mt-1 truncate font-mono text-xs text-slate-400" title={v.cid}>
                   {shortCid(v.cid)}
                 </p>
-                <p className="text-xs text-slate-500">{formatTimestamp(v.timestamp)}</p>
+                <p className="text-xs text-slate-500">
+                  {formatTimestamp(v.timestamp)}
+                  {secondsSincePrev != null && (
+                    <span className="text-slate-600"> · {formatDuration(secondsSincePrev)} after v{prev.version}</span>
+                  )}
+                </p>
               </div>
 
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleCopy(v)}
+                  className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-helix-light hover:text-helix-light"
+                >
+                  {copiedVersion === v.version ? 'Copied!' : 'Copy CID'}
+                </button>
+                {isPreviewable && (
+                  <button
+                    onClick={() => setPreviewVersion(previewVersion === v.version ? null : v.version)}
+                    className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-helix-light hover:text-helix-light"
+                  >
+                    {previewVersion === v.version ? 'Hide' : 'Preview'}
+                  </button>
+                )}
                 <a
                   href={cidToGatewayUrl(v.cid)}
                   target="_blank"
@@ -79,6 +107,14 @@ export default function VersionHistory({ filename, versions }) {
                   {downloadingVersion === v.version ? 'Downloading…' : 'Download'}
                 </button>
               </div>
+
+              {previewVersion === v.version && (
+                <img
+                  src={cidToGatewayUrl(v.cid)}
+                  alt={`${filename} v${v.version} preview`}
+                  className="mt-2 max-h-64 w-full rounded-lg border border-slate-800 object-contain"
+                />
+              )}
             </div>
           </li>
         )

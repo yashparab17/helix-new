@@ -1,0 +1,11 @@
+# Claude Code local config — machine-specific, not part of the project
+.claude/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+
+# Editors sometimes drop these at the repo root even though each
+# sub-project (contracts/, frontend/) has its own more specific .gitignore
+node_modules/
+*.log

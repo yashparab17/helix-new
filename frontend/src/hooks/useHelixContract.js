@@ -65,9 +65,14 @@ export function useHelixContract() {
   /**
    * Appends a new version for `filename` with the given `cid` by calling
    * the contract's uploadFile function, then refreshes local state.
+   *
+   * `onSubmitted(hash)`, if given, fires as soon as the wallet returns a
+   * transaction hash — i.e. right after the user confirms in MetaMask, but
+   * before the transaction is mined — so callers can show "submitted,
+   * waiting for confirmation" instead of one opaque "confirming" spinner.
    */
   const appendVersion = useCallback(
-    async (filename, cid) => {
+    async (filename, cid, onSubmitted) => {
       if (!walletClient) throw new Error('Wallet not connected.')
 
       const hash = await walletClient.writeContract({
@@ -76,6 +81,7 @@ export function useHelixContract() {
         functionName: 'uploadFile',
         args: [filename, cid],
       })
+      onSubmitted?.(hash)
 
       await publicClient.waitForTransactionReceipt({ hash })
       await loadFiles()

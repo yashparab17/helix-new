@@ -3,6 +3,7 @@ import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 
 import Navbar from './components/Navbar.jsx'
+import NetworkBanner from './components/NetworkBanner.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import UploadModal from './components/UploadModal.jsx'
 import { useHelixContract } from './hooks/useHelixContract.js'
@@ -26,6 +27,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950">
       <Navbar />
+      <NetworkBanner />
 
       {!isConnected ? (
         <main className="mx-auto flex max-w-2xl flex-col items-center px-4 py-24 text-center sm:px-6">
