@@ -1,7 +1,7 @@
 # Helix — Usage Guide
 
-Full walkthrough to get Helix running locally on **Linux or Windows**, from a bare checkout
-to uploading your first versioned file.
+Full walkthrough to get Helix running on **Linux or Windows**, from a bare checkout to
+uploading your first versioned file — locally against Anvil, and on the **Sepolia testnet**.
 
 ## Prerequisites
 
@@ -75,16 +75,19 @@ cp .env.example .env
 # build the contract
 forge build
 
-# run the test suite
+# run the test suite — should print "7 passed; 0 failed"
 forge test
 
 # deploy to your running Anvil node
 source .env
 forge script script/Deploy.s.sol:DeployHelix \
   --rpc-url $RPC_URL \
-  --private-key $PRIVATE_KEY \
   --broadcast
 ```
+
+> **Using PowerShell instead of bash?** `source` doesn't exist in pwsh. `PRIVATE_KEY` is
+> read automatically from `.env` by the deploy script either way, so just paste the RPC URL
+> directly: `forge script script/Deploy.s.sol:DeployHelix --rpc-url http://127.0.0.1:8545 --broadcast`.
 
 The script logs the deployed address, e.g.:
 ```
@@ -94,6 +97,10 @@ Helix deployed at: 0x5FbDB2315678afecb367f032d93F642f64180aa
 With a freshly started Anvil node and account `(0)` as deployer, this address is
 deterministic and will normally match the default already baked into
 `frontend/.env.example`. **Copy the address it prints anyway** — you'll need it in step 3.
+
+> **Deploying to Sepolia instead of Anvil?** Skip straight to
+> [Deploying to a public testnet](#deploying-to-a-public-testnet-sepolia) below, then come
+> back to step 3 with the Sepolia address and RPC URL it gives you.
 
 ---
 
@@ -112,10 +119,19 @@ Edit `frontend/.env`:
 - `VITE_PINATA_JWT` — your Pinata JWT (Pinata dashboard → **API Keys** → **New Key** →
   enable `pinFileToIPFS` → copy the JWT).
 - `VITE_HELIX_CONTRACT_ADDRESS` — the address printed in step 2.
-- `VITE_RPC_URL` — leave as `http://127.0.0.1:8545` for local Anvil.
+- `VITE_CHAIN` — `anvil` for local dev (default), `sepolia` if you deployed to the testnet
+  in the box above.
+- `VITE_RPC_URL` — leave as `http://127.0.0.1:8545` for local Anvil; use your Sepolia RPC URL
+  if `VITE_CHAIN=sepolia`.
 - `VITE_WALLETCONNECT_PROJECT_ID` — optional but recommended: create a free project at
   [cloud.walletconnect.com](https://cloud.walletconnect.com) for a smoother RainbowKit
   connect flow.
+
+Run the frontend's own test suite (pure-function unit tests — no chain or wallet needed):
+
+```bash
+npm run test
+```
 
 Start the dev server:
 
@@ -128,7 +144,9 @@ browser (Chrome, Edge, Firefox) on Linux or Windows.
 
 ---
 
-## 4. Connect MetaMask to Anvil
+## 4. Connect MetaMask
+
+**If you're running against local Anvil:**
 
 1. Open MetaMask → **networks dropdown** → **Add network** → **Add a network manually**.
 2. Enter:
@@ -141,6 +159,16 @@ browser (Chrome, Edge, Firefox) on Linux or Windows.
    than the deployer if you want a clean "user" wallet, or reuse the deployer — either
    works).
 4. Switch MetaMask to the **Anvil Local** network.
+
+**If you're running against Sepolia:**
+
+1. MetaMask ships with Sepolia already available — just open the networks dropdown and
+   enable **Show test networks**, then switch to **Sepolia**.
+2. Make sure the wallet you connect with holds Sepolia ETH (see the faucet step below) if
+   you plan to upload files yourself, or is any wallet at all if you only plan to *view*
+   someone else's history.
+3. If Helix loads on the wrong network, the app shows a banner with a one-click **Switch
+   network** button — you don't have to do this manually every time.
 
 ---
 
@@ -160,16 +188,81 @@ browser (Chrome, Edge, Firefox) on Linux or Windows.
 
 ---
 
+## Deploying to a public testnet (Sepolia)
+
+Use this instead of step 2 when you want a deployment that anyone with a browser and a
+wallet can reach — not just people on your machine.
+
+1. **Get a deployer wallet.** Never reuse Anvil's default account (its private key is
+   public and known to everyone) or any wallet holding real funds. Generate a fresh,
+   throwaway one:
+   ```bash
+   cast wallet new
+   ```
+   This prints an address and private key — treat the private key as sensitive from this
+   point on (don't commit it, don't paste it anywhere public).
+
+2. **Fund it** with free Sepolia ETH from a faucet, using the address from step 1:
+   - [Google Cloud Sepolia Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)
+   - [Alchemy Sepolia Faucet](https://sepoliafaucet.com/)
+
+   Confirm it landed:
+   ```bash
+   cast balance <your-address> --rpc-url https://ethereum-sepolia-rpc.publicnode.com --ether
+   ```
+
+3. **Get an RPC URL.** A free public endpoint needs no signup:
+   `https://ethereum-sepolia-rpc.publicnode.com` (or `https://rpc.sepolia.org`). For
+   heavier use, a free [Alchemy](https://alchemy.com) or [Infura](https://infura.io) project
+   gives you a more reliable dedicated URL.
+
+4. **Configure `contracts/.env`:**
+   ```
+   PRIVATE_KEY=<the throwaway private key from step 1>
+   RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+   ```
+
+5. **Deploy:**
+   ```bash
+   cd contracts
+   source .env
+   forge script script/Deploy.s.sol:DeployHelix --rpc-url "$RPC_URL" --broadcast
+   ```
+   **In PowerShell**, skip `source` and pass the RPC URL directly instead (`PRIVATE_KEY` is
+   picked up from `.env` automatically regardless of shell):
+   ```powershell
+   forge script script/Deploy.s.sol:DeployHelix --rpc-url https://ethereum-sepolia-rpc.publicnode.com --broadcast
+   ```
+   Note the deployed address it prints — you'll put it in `frontend/.env` as
+   `VITE_HELIX_CONTRACT_ADDRESS` in step 3, along with `VITE_CHAIN=sepolia` and the same
+   `RPC_URL` as `VITE_RPC_URL`.
+
+6. **Verify the deployment landed** (independent of the frontend):
+   ```bash
+   cast code <deployed-address> --rpc-url "$RPC_URL"
+   ```
+   Any output other than `0x` confirms real bytecode is on-chain. You can also paste the
+   address into [sepolia.etherscan.io](https://sepolia.etherscan.io) to see it (source
+   verification on Etherscan is a separate, optional step, not required for the app to work).
+
+---
+
 ## Troubleshooting
 
 - **MetaMask shows the wrong balance / nonce errors** — if you restart Anvil, its state
   resets. In MetaMask, go to **Settings → Advanced → Clear activity tab data** to reset the
   cached nonce for your imported test account.
 - **Transactions hang forever** — make sure Anvil (step 1) is still running and MetaMask is
-  on the `Anvil Local` network, not Ethereum Mainnet or another testnet.
+  on the same network the frontend is configured for (`VITE_CHAIN` in `frontend/.env`).
 - **Upload fails with a Pinata error** — double-check `VITE_PINATA_JWT` in `frontend/.env`
   has the `pinFileToIPFS` permission enabled, and restart `npm run dev` after editing `.env`
   (Vite only reads env vars at startup).
 - **"Contract not deployed at this address"-style errors** — confirm
   `VITE_HELIX_CONTRACT_ADDRESS` in `frontend/.env` matches the address printed by your most
-  recent `forge script ... --broadcast` run.
+  recent `forge script ... --broadcast` run, and that `VITE_CHAIN`/`VITE_RPC_URL` point at
+  the same chain you deployed to.
+- **Sepolia transaction stuck pending** — public RPC endpoints are sometimes slow under
+  load; check the address on [sepolia.etherscan.io](https://sepolia.etherscan.io) directly,
+  or switch `RPC_URL`/`VITE_RPC_URL` to a dedicated Alchemy/Infura endpoint.
+- **"Insufficient funds" deploying to Sepolia** — the deployer wallet needs Sepolia ETH; see
+  the faucet step above. A `Helix` deploy costs well under 0.01 ETH in gas.
