@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react'
+import { useAccount } from 'wagmi'
 import FileCard from './FileCard.jsx'
 import { useArchivedFilenames } from '../utils/archive.js'
 import { buildCsv, buildJson, downloadText } from '../utils/exportHistory.js'
+import { publicViewPath } from '../utils/route.js'
 
 export default function Dashboard({ files, isLoading, error, onNewUpload, onUploadNewVersion }) {
+  const { address } = useAccount()
   const [query, setQuery] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
   const { archived, toggleArchive } = useArchivedFilenames()
 
   const archivedCount = files.filter((f) => archived.has(f.filename)).length
@@ -25,6 +29,17 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
     else downloadText(buildJson(rows), 'helix-history.json', 'application/json')
   }
 
+  const handleCopyShareLink = async () => {
+    const url = `${window.location.origin}${publicViewPath(address)}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 1500)
+    } catch {
+      window.alert(`Could not copy automatically — link: ${url}`)
+    }
+  }
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -35,6 +50,12 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleCopyShareLink}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light"
+          >
+            {linkCopied ? 'Link copied!' : 'Share'}
+          </button>
           <button
             onClick={() => handleExport('json')}
             disabled={files.length === 0}

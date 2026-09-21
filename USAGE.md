@@ -185,6 +185,16 @@ browser (Chrome, Edge, Firefox) on Linux or Windows.
    and confirm again — this appends **v2**, **v3**, etc., without ever touching v1.
 5. Click **View** to open any version straight from IPFS, or **Download** to save it to your
    machine.
+6. Click **Share** (top of the dashboard) to copy a read-only link
+   (`/view/0xYourAddress`) that anyone can open to browse your file history — no wallet
+   needed on their end. This is how Helix supports collaboration in V1: sharing visibility,
+   not shared write access (only you can add new versions to your own history).
+
+> **Note for hosting the built frontend as a static site** (Vercel/Netlify/GitHub Pages,
+> etc.): the `/view/0x...` route is handled client-side, so the host needs an SPA fallback
+> (serve `index.html` for unknown paths) or a direct link/refresh to that URL will 404.
+> Vite's own dev server (`npm run dev`) does this automatically, so it only shows up once
+> you deploy — check your host's docs for "SPA rewrite" or "history API fallback."
 
 ---
 

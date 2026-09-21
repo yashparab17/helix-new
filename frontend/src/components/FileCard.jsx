@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import VersionHistory from './VersionHistory.jsx'
 
-export default function FileCard({ file, onUploadNewVersion, isArchived, onToggleArchive }) {
+export default function FileCard({
+  file,
+  onUploadNewVersion,
+  isArchived,
+  onToggleArchive,
+  readOnly = false,
+}) {
   const [expanded, setExpanded] = useState(false)
   const latest = [...file.versions].sort((a, b) => b.version - a.version)[0]
 
@@ -25,26 +31,30 @@ export default function FileCard({ file, onUploadNewVersion, isArchived, onToggl
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span
-            onClick={(e) => {
-              e.stopPropagation()
-              onUploadNewVersion(file.filename)
-            }}
-            role="button"
-            className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-helix-light hover:text-helix-light"
-          >
-            + New version
-          </span>
-          <span
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleArchive(file.filename)
-            }}
-            role="button"
-            className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-amber-400 hover:text-amber-300"
-          >
-            {isArchived ? 'Unarchive' : 'Archive'}
-          </span>
+          {!readOnly && (
+            <>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onUploadNewVersion(file.filename)
+                }}
+                role="button"
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-helix-light hover:text-helix-light"
+              >
+                + New version
+              </span>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleArchive(file.filename)
+                }}
+                role="button"
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-amber-400 hover:text-amber-300"
+              >
+                {isArchived ? 'Unarchive' : 'Archive'}
+              </span>
+            </>
+          )}
           <span className={`text-slate-500 transition-transform ${expanded ? 'rotate-180' : ''}`}>
             ▾
           </span>

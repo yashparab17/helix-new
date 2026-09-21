@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 
@@ -6,9 +6,38 @@ import Navbar from './components/Navbar.jsx'
 import NetworkBanner from './components/NetworkBanner.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import UploadModal from './components/UploadModal.jsx'
+import PublicView from './components/PublicView.jsx'
 import { useHelixContract } from './hooks/useHelixContract.js'
+import { parsePublicViewAddress } from './utils/route.js'
 
 export default function App() {
+  const [publicAddress, setPublicAddress] = useState(() =>
+    parsePublicViewAddress(window.location.pathname)
+  )
+
+  useEffect(() => {
+    const onPopState = () => setPublicAddress(parsePublicViewAddress(window.location.pathname))
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  if (publicAddress) {
+    return (
+      <div className="min-h-screen bg-slate-950">
+        <Navbar />
+        <PublicView address={publicAddress} />
+        <footer className="mx-auto max-w-6xl px-4 py-8 text-center text-xs text-slate-600 sm:px-6">
+          Helix — files live on IPFS, version history lives on-chain, nothing lives on our
+          servers.
+        </footer>
+      </div>
+    )
+  }
+
+  return <ConnectedApp />
+}
+
+function ConnectedApp() {
   const { isConnected } = useAccount()
   const { files, isLoading, error, appendVersion } = useHelixContract()
   const [uploadOpen, setUploadOpen] = useState(false)
