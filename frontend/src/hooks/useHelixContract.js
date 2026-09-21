@@ -3,32 +3,47 @@ import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
 import { HELIX_ABI, HELIX_CONTRACT_ADDRESS } from '../config/contract.js'
 
 /**
- * Reads every file (and its full version history) that `owner` has ever
- * uploaded, straight from the contract's public view functions. Shared by
- * the connected-wallet dashboard and the public read-only view — both just
- * need "all files for this address," the only difference is where the
- * address comes from.
+ * Reads files (and full version history) that `owner` has uploaded, straight
+ * from the contract's public view functions.
+ *
+ * `includeHidden`, when true, uses `getFiles` (everything) and attaches an
+ * `isFileHidden` check per filename — this is what the owner's own dashboard
+ * needs so it can offer a "show hidden" toggle. When false (the default), it
+ * uses `getVisibleFiles`, which never includes hidden files at all — this is
+ * what the public/shared view calls, so hidden files never appear to anyone
+ * but the owner, regardless of who's asking.
  */
-async function fetchFilesForOwner(publicClient, owner) {
+async function fetchFilesForOwner(publicClient, owner, { includeHidden = false } = {}) {
   const filenames = await publicClient.readContract({
     address: HELIX_CONTRACT_ADDRESS,
     abi: HELIX_ABI,
-    functionName: 'getFiles',
+    functionName: includeHidden ? 'getFiles' : 'getVisibleFiles',
     args: [owner],
   })
 
   return Promise.all(
     filenames.map(async (filename) => {
-      const versions = await publicClient.readContract({
-        address: HELIX_CONTRACT_ADDRESS,
-        abi: HELIX_ABI,
-        functionName: 'getVersions',
-        args: [owner, filename],
-      })
+      const [versions, hidden] = await Promise.all([
+        publicClient.readContract({
+          address: HELIX_CONTRACT_ADDRESS,
+          abi: HELIX_ABI,
+          functionName: 'getVersions',
+          args: [owner, filename],
+        }),
+        includeHidden
+          ? publicClient.readContract({
+              address: HELIX_CONTRACT_ADDRESS,
+              abi: HELIX_ABI,
+              functionName: 'isFileHidden',
+              args: [owner, filename],
+            })
+          : false,
+      ])
       // versions come back oldest-first from the contract; keep that
       // order for the linear history view, newest-last.
       return {
         filename,
+        hidden,
         versions: versions.map((v) => ({
           cid: v.cid,
           version: Number(v.version),
@@ -75,15 +90,16 @@ export function useUploadFile() {
 
 /**
  * Centralizes all interaction with the Helix contract for the connected
- * wallet's own dashboard: loading its file list/history and uploading new
- * versions to its own files.
+ * wallet's own dashboard: loading its full file list/history (including
+ * hidden files), uploading new versions, and hiding/unhiding files.
  */
 export function useHelixContract() {
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
   const uploadFile = useUploadFile()
 
-  const [files, setFiles] = useState([]) // [{ filename, versions: [...] }]
+  const [files, setFiles] = useState([]) // [{ filename, hidden, versions: [...] }]
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -92,7 +108,7 @@ export function useHelixContract() {
     setIsLoading(true)
     setError(null)
     try {
-      setFiles(await fetchFilesForOwner(publicClient, address))
+      setFiles(await fetchFilesForOwner(publicClient, address, { includeHidden: true }))
     } catch (err) {
       console.error(err)
       setError(err.shortMessage || err.message || 'Failed to load files from chain.')
@@ -114,13 +130,29 @@ export function useHelixContract() {
     [uploadFile, address, loadFiles]
   )
 
-  return { files, isLoading, error, refresh: loadFiles, appendVersion }
+  const toggleHidden = useCallback(
+    async (filename, hide) => {
+      if (!walletClient) throw new Error('Wallet not connected.')
+      const hash = await walletClient.writeContract({
+        address: HELIX_CONTRACT_ADDRESS,
+        abi: HELIX_ABI,
+        functionName: hide ? 'hideFile' : 'unhideFile',
+        args: [filename],
+      })
+      await publicClient.waitForTransactionReceipt({ hash })
+      await loadFiles()
+      return hash
+    },
+    [walletClient, publicClient, loadFiles]
+  )
+
+  return { files, isLoading, error, refresh: loadFiles, appendVersion, toggleHidden }
 }
 
 /**
- * Read-only counterpart to useHelixContract: loads `owner`'s file history
- * without requiring a connected wallet at all — just an address and the
- * chain's public RPC. Powers the public share-link view.
+ * Read-only counterpart to useHelixContract: loads `owner`'s *visible* file
+ * history without requiring a connected wallet at all — hidden files are
+ * never included, no matter who's viewing. Powers the public share link.
  */
 export function usePublicFiles(owner) {
   const publicClient = usePublicClient()

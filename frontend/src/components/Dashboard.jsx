@@ -7,27 +7,58 @@ import { useArchivedFilenames } from '../utils/archive.js'
 import { buildCsv, buildJson, downloadText } from '../utils/exportHistory.js'
 import { publicViewPath } from '../utils/route.js'
 
-export default function Dashboard({ files, isLoading, error, onNewUpload, onUploadNewVersion }) {
+export default function Dashboard({
+  files,
+  isLoading,
+  error,
+  onNewUpload,
+  onUploadNewVersion,
+  onToggleHidden,
+}) {
   const { address } = useAccount()
   const [query, setQuery] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  const [showHidden, setShowHidden] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [showCollaborators, setShowCollaborators] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
+  const [hidingFilename, setHidingFilename] = useState(null)
   const { archived, toggleArchive } = useArchivedFilenames()
 
   const archivedCount = files.filter((f) => archived.has(f.filename)).length
+  const hiddenCount = files.filter((f) => f.hidden).length
 
   const visibleFiles = useMemo(() => {
     return files.filter((f) => {
       if (!showArchived && archived.has(f.filename)) return false
+      if (!showHidden && f.hidden) return false
       if (query && !f.filename.toLowerCase().includes(query.trim().toLowerCase())) return false
       return true
     })
-  }, [files, archived, showArchived, query])
+  }, [files, archived, showArchived, showHidden, query])
+
+  // Activity feed and export ignore the archive/search filters (those are
+  // just display decluttering) but still respect "hidden" — a hidden file
+  // shouldn't leak into either surface just because it's not shown in the grid.
+  const nonHiddenFiles = useMemo(
+    () => files.filter((f) => showHidden || !f.hidden),
+    [files, showHidden]
+  )
+
+  const handleToggleHidden = async (filename, hide) => {
+    setHidingFilename(filename)
+    try {
+      await onToggleHidden(filename, hide)
+    } catch (err) {
+      console.error(err)
+      window.alert(err.shortMessage || err.message || 'Failed to update visibility.')
+    } finally {
+      setHidingFilename(null)
+    }
+  }
 
   const handleExport = (format) => {
-    const rows = files.flatMap((f) => f.versions.map((v) => ({ filename: f.filename, ...v })))
+    const rows = nonHiddenFiles.flatMap((f) => f.versions.map((v) => ({ filename: f.filename, ...v })))
     if (rows.length === 0) return
     if (format === 'csv') downloadText(buildCsv(rows), 'helix-history.csv', 'text/csv')
     else downloadText(buildJson(rows), 'helix-history.json', 'application/json')
@@ -74,14 +105,14 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
           </button>
           <button
             onClick={() => handleExport('json')}
-            disabled={files.length === 0}
+            disabled={nonHiddenFiles.length === 0}
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light disabled:opacity-40"
           >
             Export JSON
           </button>
           <button
             onClick={() => handleExport('csv')}
-            disabled={files.length === 0}
+            disabled={nonHiddenFiles.length === 0}
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light disabled:opacity-40"
           >
             Export CSV
@@ -114,9 +145,20 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
             Show archived ({archivedCount})
           </label>
         )}
+        {hiddenCount > 0 && (
+          <label className="flex items-center gap-2 text-sm text-slate-400">
+            <input
+              type="checkbox"
+              checked={showHidden}
+              onChange={(e) => setShowHidden(e.target.checked)}
+              className="rounded border-slate-700 bg-slate-800"
+            />
+            Show hidden ({hiddenCount})
+          </label>
+        )}
       </div>
 
-      {showActivity && <ActivityFeed files={files} />}
+      {showActivity && <ActivityFeed files={nonHiddenFiles} />}
       {showCollaborators && <CollaboratorPanel />}
 
       {error && (
@@ -154,6 +196,8 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
             onUploadNewVersion={onUploadNewVersion}
             isArchived={archived.has(file.filename)}
             onToggleArchive={toggleArchive}
+            onToggleHidden={handleToggleHidden}
+            hidingBusy={hidingFilename === file.filename}
           />
         ))}
       </div>

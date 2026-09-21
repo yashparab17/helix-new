@@ -7,12 +7,14 @@ export default function FileCard({
   isArchived,
   onToggleArchive,
   readOnly = false,
+  onToggleHidden,
+  hidingBusy = false,
 }) {
   const [expanded, setExpanded] = useState(false)
   const latest = [...file.versions].sort((a, b) => b.version - a.version)[0]
 
   return (
-    <div className={`rounded-xl border bg-slate-900 shadow-sm ${isArchived ? 'border-slate-800/50 opacity-60' : 'border-slate-800'}`}>
+    <div className={`rounded-xl border bg-slate-900 shadow-sm ${isArchived || file.hidden ? 'border-slate-800/50 opacity-60' : 'border-slate-800'}`}>
       <button
         onClick={() => setExpanded((v) => !v)}
         className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
@@ -27,6 +29,7 @@ export default function FileCard({
               {file.versions.length} version{file.versions.length !== 1 ? 's' : ''} · latest{' '}
               <span className="font-mono">v{latest?.version}</span>
               {isArchived && <span className="ml-1 text-amber-500">· archived</span>}
+              {file.hidden && <span className="ml-1 text-red-400">· hidden</span>}
             </p>
           </div>
         </div>
@@ -53,6 +56,19 @@ export default function FileCard({
               >
                 {isArchived ? 'Unarchive' : 'Archive'}
               </span>
+              {onToggleHidden && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!hidingBusy) onToggleHidden(file.filename, !file.hidden)
+                  }}
+                  role="button"
+                  title="Hides this file from everyone browsing the app, including your share link. Not the same as deletion — the on-chain record still exists for anyone querying the contract directly."
+                  className={`rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-red-500 hover:text-red-400 ${hidingBusy ? 'cursor-not-allowed opacity-40' : ''}`}
+                >
+                  {hidingBusy ? 'Working…' : file.hidden ? 'Unhide' : 'Hide'}
+                </span>
+              )}
             </>
           )}
           <span className={`text-slate-500 transition-transform ${expanded ? 'rotate-180' : ''}`}>

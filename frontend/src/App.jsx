@@ -39,7 +39,7 @@ export default function App() {
 
 function ConnectedApp() {
   const { isConnected } = useAccount()
-  const { files, isLoading, error, appendVersion } = useHelixContract()
+  const { files, isLoading, error, appendVersion, toggleHidden } = useHelixContract()
   const [uploadOpen, setUploadOpen] = useState(false)
   const [prefillName, setPrefillName] = useState('')
 
@@ -83,6 +83,7 @@ function ConnectedApp() {
             error={error}
             onNewUpload={openUploadNew}
             onUploadNewVersion={openUploadFor}
+            onToggleHidden={toggleHidden}
           />
         </main>
       )}

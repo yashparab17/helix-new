@@ -183,4 +183,93 @@ contract HelixTest is Test {
         vm.expectRevert(bytes("Helix: not authorized for this owner"));
         helix.uploadFile(carol, "report.pdf", "QmCid1");
     }
+
+    // --- Hiding ---
+
+    function test_HiddenFileExcludedFromVisibleFilesButNotFromGetFiles() public {
+        vm.startPrank(alice);
+        helix.uploadFile(alice, "public.txt", "QmCid1");
+        helix.uploadFile(alice, "secret.txt", "QmCid2");
+        helix.hideFile("secret.txt");
+        vm.stopPrank();
+
+        string[] memory visible = helix.getVisibleFiles(alice);
+        assertEq(visible.length, 1);
+        assertEq(visible[0], "public.txt");
+
+        string[] memory all = helix.getFiles(alice);
+        assertEq(all.length, 2);
+        assertEq(all[1], "secret.txt");
+    }
+
+    function test_HidingDoesNotTouchVersionHistory() public {
+        vm.startPrank(alice);
+        helix.uploadFile(alice, "secret.txt", "QmCid1");
+        helix.hideFile("secret.txt");
+        vm.stopPrank();
+
+        Helix.FileVersion[] memory versions = helix.getVersions(alice, "secret.txt");
+        assertEq(versions.length, 1);
+        assertEq(versions[0].cid, "QmCid1");
+    }
+
+    function test_UnhideFileRestoresVisibility() public {
+        vm.startPrank(alice);
+        helix.uploadFile(alice, "secret.txt", "QmCid1");
+        helix.hideFile("secret.txt");
+        helix.unhideFile("secret.txt");
+        vm.stopPrank();
+
+        string[] memory visible = helix.getVisibleFiles(alice);
+        assertEq(visible.length, 1);
+        assertEq(visible[0], "secret.txt");
+        assertFalse(helix.isFileHidden(alice, "secret.txt"));
+    }
+
+    function test_IsFileHiddenReflectsCurrentState() public {
+        vm.startPrank(alice);
+        helix.uploadFile(alice, "secret.txt", "QmCid1");
+        assertFalse(helix.isFileHidden(alice, "secret.txt"));
+
+        helix.hideFile("secret.txt");
+        assertTrue(helix.isFileHidden(alice, "secret.txt"));
+        vm.stopPrank();
+    }
+
+    function test_RevertsHidingUnknownFile() public {
+        vm.prank(alice);
+        vm.expectRevert(bytes("Helix: unknown file"));
+        helix.hideFile("does-not-exist.txt");
+    }
+
+    function test_RevertsHidingAlreadyHiddenFile() public {
+        vm.startPrank(alice);
+        helix.uploadFile(alice, "secret.txt", "QmCid1");
+        helix.hideFile("secret.txt");
+        vm.expectRevert(bytes("Helix: already hidden"));
+        helix.hideFile("secret.txt");
+        vm.stopPrank();
+    }
+
+    function test_RevertsUnhidingNotHiddenFile() public {
+        vm.startPrank(alice);
+        helix.uploadFile(alice, "secret.txt", "QmCid1");
+        vm.expectRevert(bytes("Helix: not hidden"));
+        helix.unhideFile("secret.txt");
+        vm.stopPrank();
+    }
+
+    function test_CollaboratorCannotHideOwnersFile() public {
+        vm.prank(alice);
+        helix.addCollaborator(bob);
+
+        // bob has no file of his own called "secret.txt", so this reverts as
+        // unknown rather than touching alice's file — hiding is owner-only,
+        // keyed strictly to msg.sender.
+        vm.prank(bob);
+        vm.expectRevert(bytes("Helix: unknown file"));
+        helix.hideFile("secret.txt");
+
+        assertFalse(helix.isFileHidden(alice, "secret.txt"));
+    }
 }

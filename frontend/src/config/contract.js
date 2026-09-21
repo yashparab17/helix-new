@@ -30,6 +30,37 @@ export const HELIX_ABI = [
   },
   {
     type: 'function',
+    name: 'getVisibleFiles',
+    stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'string[]' }],
+  },
+  {
+    type: 'function',
+    name: 'hideFile',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'filename', type: 'string' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'unhideFile',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'filename', type: 'string' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'isFileHidden',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'filename', type: 'string' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
     name: 'getVersions',
     stateMutability: 'view',
     inputs: [
@@ -128,6 +159,24 @@ export const HELIX_ABI = [
     inputs: [
       { name: 'owner', type: 'address', indexed: true },
       { name: 'collaborator', type: 'address', indexed: true },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'FileHidden',
+    inputs: [
+      { name: 'owner', type: 'address', indexed: true },
+      { name: 'filename', type: 'string', indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'FileUnhidden',
+    inputs: [
+      { name: 'owner', type: 'address', indexed: true },
+      { name: 'filename', type: 'string', indexed: false },
     ],
     anonymous: false,
   },

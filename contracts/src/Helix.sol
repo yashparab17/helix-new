@@ -31,6 +31,11 @@ contract Helix {
     ///      since-removed ones — filter through _isCollaborator to get the active set)
     mapping(address => address[]) private _collaboratorHistory;
 
+    /// @dev owner => filename => currently hidden from default (getVisibleFiles) listings.
+    ///      This does not delete or move any data — the file's full history remains
+    ///      readable via getFiles/getVersions for anyone who queries it directly.
+    mapping(address => mapping(string => bool)) private _isHidden;
+
     /// @notice Emitted every time a new version of a file is appended.
     event FileUploaded(
         address indexed owner,
@@ -46,6 +51,12 @@ contract Helix {
 
     /// @notice Emitted when an owner revokes a collaborator's upload rights.
     event CollaboratorRemoved(address indexed owner, address indexed collaborator);
+
+    /// @notice Emitted when an owner hides a file from default listings.
+    event FileHidden(address indexed owner, string filename);
+
+    /// @notice Emitted when an owner unhides a previously hidden file.
+    event FileUnhidden(address indexed owner, string filename);
 
     modifier onlyOwnerOrCollaborator(address owner) {
         require(
@@ -137,9 +148,57 @@ contract Helix {
         emit FileUploaded(owner, msg.sender, filename, cid, nextVersion, block.timestamp);
     }
 
-    /// @notice Returns every filename `owner` has ever uploaded (insertion order).
+    /// @notice Returns every filename `owner` has ever uploaded (insertion order),
+    ///         including hidden ones. Use getVisibleFiles for the filtered list.
     function getFiles(address owner) external view returns (string[] memory) {
         return _filenames[owner];
+    }
+
+    /// @notice Hides `filename` from getVisibleFiles. Only the file's owner can
+    ///         hide it (not collaborators) — this is purely a display setting,
+    ///         not a deletion: the full history stays intact and readable via
+    ///         getFiles/getVersions for anyone who queries them directly.
+    function hideFile(string calldata filename) external {
+        require(_isKnownFilename[msg.sender][filename], "Helix: unknown file");
+        require(!_isHidden[msg.sender][filename], "Helix: already hidden");
+
+        _isHidden[msg.sender][filename] = true;
+        emit FileHidden(msg.sender, filename);
+    }
+
+    /// @notice Reverses hideFile — the file reappears in getVisibleFiles.
+    function unhideFile(string calldata filename) external {
+        require(_isHidden[msg.sender][filename], "Helix: not hidden");
+
+        _isHidden[msg.sender][filename] = false;
+        emit FileUnhidden(msg.sender, filename);
+    }
+
+    /// @notice Whether `owner` has hidden `filename`.
+    function isFileHidden(address owner, string calldata filename) external view returns (bool) {
+        return _isHidden[owner][filename];
+    }
+
+    /// @notice Like getFiles, but excludes hidden filenames. This is what
+    ///         public/shared views should call so hidden files never appear
+    ///         to anyone browsing an owner's repository.
+    function getVisibleFiles(address owner) external view returns (string[] memory) {
+        string[] storage all = _filenames[owner];
+
+        uint256 visibleCount;
+        for (uint256 i = 0; i < all.length; i++) {
+            if (!_isHidden[owner][all[i]]) visibleCount++;
+        }
+
+        string[] memory visible = new string[](visibleCount);
+        uint256 j;
+        for (uint256 i = 0; i < all.length; i++) {
+            if (!_isHidden[owner][all[i]]) {
+                visible[j] = all[i];
+                j++;
+            }
+        }
+        return visible;
     }
 
     /// @notice Returns the full linear version history for `owner`'s `filename`,
