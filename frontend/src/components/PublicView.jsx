@@ -1,16 +1,22 @@
 import { useState } from 'react'
-import { usePublicFiles } from '../hooks/useHelixContract.js'
+import { usePublicFiles, useCanUpload, useUploadFile } from '../hooks/useHelixContract.js'
 import { shortCid } from '../utils/format.js'
 import FileCard from './FileCard.jsx'
+import UploadModal from './UploadModal.jsx'
 
 /**
- * Read-only history for a given address — no wallet connection required.
- * This is the page a Helix user shares so collaborators can browse their
- * files/versions without needing to hold or import that wallet's key.
+ * History for a given address. Always readable without a wallet — that's
+ * the point of the share link. If the connected wallet is the owner or one
+ * of their collaborators, upload actions unlock too, so this same page
+ * doubles as the "repository" a collaborator works from.
  */
 export default function PublicView({ address }) {
-  const { files, isLoading, error } = usePublicFiles(address)
+  const { files, isLoading, error, refresh } = usePublicFiles(address)
+  const canUpload = useCanUpload(address)
+  const uploadFile = useUploadFile()
   const [copied, setCopied] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [prefillName, setPrefillName] = useState('')
 
   const handleCopyLink = async () => {
     try {
@@ -22,25 +28,54 @@ export default function PublicView({ address }) {
     }
   }
 
+  const openUploadFor = (filename) => {
+    setPrefillName(filename)
+    setUploadOpen(true)
+  }
+
+  const openUploadNew = () => {
+    setPrefillName('')
+    setUploadOpen(true)
+  }
+
+  const handleUpload = async (filename, cid, onSubmitted) => {
+    const hash = await uploadFile(address, filename, cid, onSubmitted)
+    await refresh()
+    return hash
+  }
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-white">Public file history</h2>
+          <h2 className="text-xl font-semibold text-white">
+            {canUpload ? 'Shared file repository' : 'Public file history'}
+          </h2>
           <p className="mt-1 font-mono text-sm text-slate-400" title={address}>
             {shortCid(address)}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            Read-only — anyone with this link can browse this address's version history. No
-            wallet connection needed.
+            {canUpload
+              ? "You're a collaborator on this repository — uploads you make here are recorded under this address."
+              : "Read-only — anyone with this link can browse this address's version history. No wallet connection needed."}
           </p>
         </div>
-        <button
-          onClick={handleCopyLink}
-          className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light"
-        >
-          {copied ? 'Link copied!' : 'Copy link'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleCopyLink}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light"
+          >
+            {copied ? 'Link copied!' : 'Copy link'}
+          </button>
+          {canUpload && (
+            <button
+              onClick={openUploadNew}
+              className="rounded-lg bg-helix px-4 py-2 text-sm font-semibold text-white hover:bg-helix-light"
+            >
+              + Upload file
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -63,9 +98,27 @@ export default function PublicView({ address }) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {files.map((file) => (
-          <FileCard key={file.filename} file={file} readOnly />
+          <FileCard
+            key={file.filename}
+            file={file}
+            readOnly={!canUpload}
+            onUploadNewVersion={openUploadFor}
+            isArchived={false}
+            onToggleArchive={() => {}}
+          />
         ))}
       </div>
+
+      {canUpload && (
+        <UploadModal
+          open={uploadOpen}
+          onClose={() => setUploadOpen(false)}
+          onUpload={handleUpload}
+          existingFilenames={files.map((f) => f.filename)}
+          prefillName={prefillName}
+          key={prefillName || 'new'}
+        />
+      )}
     </section>
   )
 }

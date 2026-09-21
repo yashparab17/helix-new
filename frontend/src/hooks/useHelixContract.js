@@ -33,6 +33,7 @@ async function fetchFilesForOwner(publicClient, owner) {
           cid: v.cid,
           version: Number(v.version),
           timestamp: Number(v.timestamp),
+          uploader: v.uploader,
         })),
       }
     })
@@ -40,14 +41,47 @@ async function fetchFilesForOwner(publicClient, owner) {
 }
 
 /**
+ * Appends a new version to `owner`'s `filename`. Works whether the caller is
+ * the owner themselves or a collaborator the owner has authorized — the
+ * contract enforces that, this hook doesn't need to know which case it is.
+ *
+ * `onSubmitted(hash)`, if given, fires as soon as the wallet returns a
+ * transaction hash — i.e. right after the user confirms in MetaMask, but
+ * before the transaction is mined — so callers can show "submitted, waiting
+ * for confirmation" instead of one opaque spinner.
+ */
+export function useUploadFile() {
+  const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
+
+  return useCallback(
+    async (owner, filename, cid, onSubmitted) => {
+      if (!walletClient) throw new Error('Wallet not connected.')
+
+      const hash = await walletClient.writeContract({
+        address: HELIX_CONTRACT_ADDRESS,
+        abi: HELIX_ABI,
+        functionName: 'uploadFile',
+        args: [owner, filename, cid],
+      })
+      onSubmitted?.(hash)
+
+      await publicClient.waitForTransactionReceipt({ hash })
+      return hash
+    },
+    [walletClient, publicClient]
+  )
+}
+
+/**
  * Centralizes all interaction with the Helix contract for the connected
- * wallet: loading the file list, loading per-file version history, and
- * appending new versions (uploads).
+ * wallet's own dashboard: loading its file list/history and uploading new
+ * versions to its own files.
  */
 export function useHelixContract() {
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
-  const { data: walletClient } = useWalletClient()
+  const uploadFile = useUploadFile()
 
   const [files, setFiles] = useState([]) // [{ filename, versions: [...] }]
   const [isLoading, setIsLoading] = useState(false)
@@ -71,32 +105,13 @@ export function useHelixContract() {
     loadFiles()
   }, [loadFiles])
 
-  /**
-   * Appends a new version for `filename` with the given `cid` by calling
-   * the contract's uploadFile function, then refreshes local state.
-   *
-   * `onSubmitted(hash)`, if given, fires as soon as the wallet returns a
-   * transaction hash — i.e. right after the user confirms in MetaMask, but
-   * before the transaction is mined — so callers can show "submitted,
-   * waiting for confirmation" instead of one opaque "confirming" spinner.
-   */
   const appendVersion = useCallback(
     async (filename, cid, onSubmitted) => {
-      if (!walletClient) throw new Error('Wallet not connected.')
-
-      const hash = await walletClient.writeContract({
-        address: HELIX_CONTRACT_ADDRESS,
-        abi: HELIX_ABI,
-        functionName: 'uploadFile',
-        args: [filename, cid],
-      })
-      onSubmitted?.(hash)
-
-      await publicClient.waitForTransactionReceipt({ hash })
+      const hash = await uploadFile(address, filename, cid, onSubmitted)
       await loadFiles()
       return hash
     },
-    [walletClient, publicClient, loadFiles]
+    [uploadFile, address, loadFiles]
   )
 
   return { files, isLoading, error, refresh: loadFiles, appendVersion }
@@ -133,4 +148,121 @@ export function usePublicFiles(owner) {
   }, [loadFiles])
 
   return { files, isLoading, error, refresh: loadFiles }
+}
+
+/**
+ * Whether the connected wallet is allowed to upload on `owner`'s behalf —
+ * true if it *is* owner, or if owner has added it as a collaborator. Used to
+ * decide whether the public view unlocks upload actions for the visitor.
+ */
+export function useCanUpload(owner) {
+  const { address: connected, isConnected } = useAccount()
+  const publicClient = usePublicClient()
+  const [canUpload, setCanUpload] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function check() {
+      if (!isConnected || !connected || !owner || !publicClient) {
+        if (!cancelled) setCanUpload(false)
+        return
+      }
+      if (connected.toLowerCase() === owner.toLowerCase()) {
+        if (!cancelled) setCanUpload(true)
+        return
+      }
+      try {
+        const result = await publicClient.readContract({
+          address: HELIX_CONTRACT_ADDRESS,
+          abi: HELIX_ABI,
+          functionName: 'isCollaborator',
+          args: [owner, connected],
+        })
+        if (!cancelled) setCanUpload(result)
+      } catch (err) {
+        console.error(err)
+        if (!cancelled) setCanUpload(false)
+      }
+    }
+
+    check()
+    return () => {
+      cancelled = true
+    }
+  }, [connected, isConnected, owner, publicClient])
+
+  return canUpload
+}
+
+/**
+ * Manages the connected wallet's own collaborator list: who can currently
+ * upload on its behalf, plus adding/removing them.
+ */
+export function useCollaborators() {
+  const { address, isConnected } = useAccount()
+  const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
+
+  const [collaborators, setCollaborators] = useState([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const load = useCallback(async () => {
+    if (!isConnected || !address || !publicClient) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const list = await publicClient.readContract({
+        address: HELIX_CONTRACT_ADDRESS,
+        abi: HELIX_ABI,
+        functionName: 'getCollaborators',
+        args: [address],
+      })
+      setCollaborators(list)
+    } catch (err) {
+      console.error(err)
+      setError(err.shortMessage || err.message || 'Failed to load collaborators.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [address, isConnected, publicClient])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const add = useCallback(
+    async (collaborator) => {
+      if (!walletClient) throw new Error('Wallet not connected.')
+      const hash = await walletClient.writeContract({
+        address: HELIX_CONTRACT_ADDRESS,
+        abi: HELIX_ABI,
+        functionName: 'addCollaborator',
+        args: [collaborator],
+      })
+      await publicClient.waitForTransactionReceipt({ hash })
+      await load()
+      return hash
+    },
+    [walletClient, publicClient, load]
+  )
+
+  const remove = useCallback(
+    async (collaborator) => {
+      if (!walletClient) throw new Error('Wallet not connected.')
+      const hash = await walletClient.writeContract({
+        address: HELIX_CONTRACT_ADDRESS,
+        abi: HELIX_ABI,
+        functionName: 'removeCollaborator',
+        args: [collaborator],
+      })
+      await publicClient.waitForTransactionReceipt({ hash })
+      await load()
+      return hash
+    },
+    [walletClient, publicClient, load]
+  )
+
+  return { collaborators, isLoading, error, add, remove, refresh: load }
 }

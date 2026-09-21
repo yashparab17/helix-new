@@ -6,14 +6,16 @@ export const HELIX_CONTRACT_ADDRESS =
   import.meta.env.VITE_HELIX_CONTRACT_ADDRESS ||
   '0x5FbDB2315678afecb367f032d93F642f64180aa'
 
-// Minimal ABI — only what the frontend needs: the write function, the three
-// read/view functions, and the event used for optimistic UI updates.
+// V2 ABI: uploadFile now takes an explicit `owner` (so collaborators can
+// upload on someone else's behalf), FileVersion carries an `uploader`, and
+// there are read/write functions for managing collaborators.
 export const HELIX_ABI = [
   {
     type: 'function',
     name: 'uploadFile',
     stateMutability: 'nonpayable',
     inputs: [
+      { name: 'owner', type: 'address' },
       { name: 'filename', type: 'string' },
       { name: 'cid', type: 'string' },
     ],
@@ -42,6 +44,7 @@ export const HELIX_ABI = [
           { name: 'cid', type: 'string' },
           { name: 'version', type: 'uint256' },
           { name: 'timestamp', type: 'uint256' },
+          { name: 'uploader', type: 'address' },
         ],
       },
     ],
@@ -67,14 +70,64 @@ export const HELIX_ABI = [
     outputs: [{ name: '', type: 'string' }],
   },
   {
+    type: 'function',
+    name: 'addCollaborator',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'collaborator', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'removeCollaborator',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'collaborator', type: 'address' }],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    name: 'getCollaborators',
+    stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'address[]' }],
+  },
+  {
+    type: 'function',
+    name: 'isCollaborator',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'owner', type: 'address' },
+      { name: 'who', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
     type: 'event',
     name: 'FileUploaded',
     inputs: [
       { name: 'owner', type: 'address', indexed: true },
+      { name: 'uploader', type: 'address', indexed: true },
       { name: 'filename', type: 'string', indexed: false },
       { name: 'cid', type: 'string', indexed: false },
       { name: 'version', type: 'uint256', indexed: false },
       { name: 'timestamp', type: 'uint256', indexed: false },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'CollaboratorAdded',
+    inputs: [
+      { name: 'owner', type: 'address', indexed: true },
+      { name: 'collaborator', type: 'address', indexed: true },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'CollaboratorRemoved',
+    inputs: [
+      { name: 'owner', type: 'address', indexed: true },
+      { name: 'collaborator', type: 'address', indexed: true },
     ],
     anonymous: false,
   },

@@ -74,6 +74,11 @@ export default function VersionHistory({ filename, versions }) {
                     <span className="text-slate-600"> · {formatDuration(secondsSincePrev)} after v{prev.version}</span>
                   )}
                 </p>
+                {v.uploader && (
+                  <p className="mt-0.5 truncate text-xs text-slate-600" title={v.uploader}>
+                    by <span className="font-mono">{shortCid(v.uploader)}</span>
+                  </p>
+                )}
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center gap-2">

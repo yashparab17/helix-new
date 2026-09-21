@@ -185,10 +185,16 @@ browser (Chrome, Edge, Firefox) on Linux or Windows.
    and confirm again — this appends **v2**, **v3**, etc., without ever touching v1.
 5. Click **View** to open any version straight from IPFS, or **Download** to save it to your
    machine.
-6. Click **Share** (top of the dashboard) to copy a read-only link
-   (`/view/0xYourAddress`) that anyone can open to browse your file history — no wallet
-   needed on their end. This is how Helix supports collaboration in V1: sharing visibility,
-   not shared write access (only you can add new versions to your own history).
+6. Click **Share** (top of the dashboard) to copy a link (`/view/0xYourAddress`) that anyone
+   can open to browse your file history — no wallet needed on their end.
+7. **(V2) Add a collaborator** — click **Collaborators**, paste another wallet address, and
+   click **Add**. That address can now upload new versions to *any* of your files, present
+   or future — they do this from your share link (step 6): if their connected wallet is a
+   collaborator, the link shows upload actions instead of being read-only for them. Click
+   **Remove** to revoke access again at any time; this only affects future uploads, past
+   versions they added stay in the history exactly as they were (nothing is ever deleted or
+   rewritten). Each version's uploader address is shown in its history entry, so it's always
+   clear who added what.
 
 > **Note for hosting the built frontend as a static site** (Vercel/Netlify/GitHub Pages,
 > etc.): the `/view/0x...` route is handled client-side, so the host needs an SPA fallback
