@@ -1,18 +1,49 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { downloadFromIpfs, cidToGatewayUrl } from '../utils/pinata.js'
 import { formatTimestamp, formatDuration, shortCid } from '../utils/format.js'
+import { getPreviewKind } from '../utils/preview.js'
 
-const IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|svg|bmp)$/i
+// ponytail: truncates fetched text previews to keep the DOM light; full file
+// is still what gets downloaded/viewed via the other buttons. Raise this (or
+// add pagination) if previewing multi-MB text files becomes a real need.
+const TEXT_PREVIEW_CHAR_LIMIT = 5000
 
 export default function VersionHistory({ filename, versions }) {
   const [downloadingVersion, setDownloadingVersion] = useState(null)
   const [copiedVersion, setCopiedVersion] = useState(null)
   const [previewVersion, setPreviewVersion] = useState(null)
+  const [textPreviews, setTextPreviews] = useState({}) // version -> { status, content|message }
 
   // Show newest first for readability, but the underlying chain data (and
   // version numbers) are strictly linear / append-only oldest-to-newest.
   const ordered = [...versions].sort((a, b) => b.version - a.version)
-  const isPreviewable = IMAGE_EXTENSION.test(filename)
+  const previewKind = getPreviewKind(filename)
+
+  useEffect(() => {
+    if (previewKind !== 'text' || previewVersion == null) return
+    if (textPreviews[previewVersion]) return
+    const version = ordered.find((v) => v.version === previewVersion)
+    if (!version) return
+
+    setTextPreviews((prev) => ({ ...prev, [previewVersion]: { status: 'loading' } }))
+    fetch(cidToGatewayUrl(version.cid))
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to fetch preview (status ${res.status})`)
+        return res.text()
+      })
+      .then((text) => {
+        setTextPreviews((prev) => ({
+          ...prev,
+          [previewVersion]: { status: 'done', content: text.slice(0, TEXT_PREVIEW_CHAR_LIMIT) },
+        }))
+      })
+      .catch((err) => {
+        setTextPreviews((prev) => ({
+          ...prev,
+          [previewVersion]: { status: 'error', message: err.message || 'Preview failed.' },
+        }))
+      })
+  }, [previewKind, previewVersion, ordered, textPreviews])
 
   const handleDownload = async (version) => {
     try {
@@ -88,7 +119,7 @@ export default function VersionHistory({ filename, versions }) {
                 >
                   {copiedVersion === v.version ? 'Copied!' : 'Copy CID'}
                 </button>
-                {isPreviewable && (
+                {previewKind && (
                   <button
                     onClick={() => setPreviewVersion(previewVersion === v.version ? null : v.version)}
                     className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-helix-light hover:text-helix-light"
@@ -113,12 +144,39 @@ export default function VersionHistory({ filename, versions }) {
                 </button>
               </div>
 
-              {previewVersion === v.version && (
+              {previewVersion === v.version && previewKind === 'image' && (
                 <img
                   src={cidToGatewayUrl(v.cid)}
                   alt={`${filename} v${v.version} preview`}
                   className="mt-2 max-h-64 w-full rounded-lg border border-slate-800 object-contain"
                 />
+              )}
+
+              {previewVersion === v.version && previewKind === 'pdf' && (
+                <iframe
+                  src={cidToGatewayUrl(v.cid)}
+                  title={`${filename} v${v.version} preview`}
+                  className="mt-2 h-96 w-full rounded-lg border border-slate-800"
+                />
+              )}
+
+              {previewVersion === v.version && previewKind === 'text' && (
+                <div className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/60 p-3">
+                  {textPreviews[v.version]?.status === 'loading' && (
+                    <p className="text-xs text-slate-500">Loading preview…</p>
+                  )}
+                  {textPreviews[v.version]?.status === 'error' && (
+                    <p className="text-xs text-red-400">{textPreviews[v.version].message}</p>
+                  )}
+                  {textPreviews[v.version]?.status === 'done' && (
+                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-slate-300">
+                      {textPreviews[v.version].content}
+                      {textPreviews[v.version].content.length >= TEXT_PREVIEW_CHAR_LIMIT && (
+                        <span className="text-slate-600">{'\n… truncated, download for the full file'}</span>
+                      )}
+                    </pre>
+                  )}
+                </div>
               )}
             </div>
           </li>

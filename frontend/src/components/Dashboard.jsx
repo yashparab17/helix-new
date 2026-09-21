@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useAccount } from 'wagmi'
 import FileCard from './FileCard.jsx'
 import CollaboratorPanel from './CollaboratorPanel.jsx'
+import ActivityFeed from './ActivityFeed.jsx'
 import { useArchivedFilenames } from '../utils/archive.js'
 import { buildCsv, buildJson, downloadText } from '../utils/exportHistory.js'
 import { publicViewPath } from '../utils/route.js'
@@ -12,6 +13,7 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
   const [showArchived, setShowArchived] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [showCollaborators, setShowCollaborators] = useState(false)
+  const [showActivity, setShowActivity] = useState(false)
   const { archived, toggleArchive } = useArchivedFilenames()
 
   const archivedCount = files.filter((f) => archived.has(f.filename)).length
@@ -52,6 +54,12 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowActivity((v) => !v)}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light"
+          >
+            {showActivity ? 'Hide activity' : 'Activity'}
+          </button>
           <button
             onClick={() => setShowCollaborators((v) => !v)}
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light"
@@ -108,6 +116,7 @@ export default function Dashboard({ files, isLoading, error, onNewUpload, onUplo
         )}
       </div>
 
+      {showActivity && <ActivityFeed files={files} />}
       {showCollaborators && <CollaboratorPanel />}
 
       {error && (

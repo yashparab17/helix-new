@@ -3,6 +3,7 @@ import { usePublicFiles, useCanUpload, useUploadFile } from '../hooks/useHelixCo
 import { shortCid } from '../utils/format.js'
 import FileCard from './FileCard.jsx'
 import UploadModal from './UploadModal.jsx'
+import ActivityFeed from './ActivityFeed.jsx'
 
 /**
  * History for a given address. Always readable without a wallet — that's
@@ -17,6 +18,7 @@ export default function PublicView({ address }) {
   const [copied, setCopied] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [prefillName, setPrefillName] = useState('')
+  const [showActivity, setShowActivity] = useState(false)
 
   const handleCopyLink = async () => {
     try {
@@ -62,6 +64,12 @@ export default function PublicView({ address }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
+            onClick={() => setShowActivity((v) => !v)}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light"
+          >
+            {showActivity ? 'Hide activity' : 'Activity'}
+          </button>
+          <button
             onClick={handleCopyLink}
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-helix-light hover:text-helix-light"
           >
@@ -77,6 +85,8 @@ export default function PublicView({ address }) {
           )}
         </div>
       </div>
+
+      {showActivity && <ActivityFeed files={files} />}
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-900 bg-red-950/50 px-4 py-3 text-sm text-red-300">
